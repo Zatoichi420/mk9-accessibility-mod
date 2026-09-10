@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+reader.lock
+reader_log.txt
+ocr_reader/library_misses/*
+!ocr_reader/library_misses/.gitkeep
