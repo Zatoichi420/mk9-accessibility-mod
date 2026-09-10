@@ -37,10 +37,47 @@ for the full precedent. In short:
   and any input-driven testing need the user to start the reader
   themselves, not Claude.
 
-## Phase 0 findings
+## Phase 0 findings (2026-09-10, static analysis)
 
-*Pending — static-analysis investigation of the actual install in
-progress.*
+- **Real executable**: `DiscContentPC\MKKE.exe` (~11MB, **32-bit/x86** — a
+  real difference from MKX: any future memory-reading work needs 4-byte
+  pointers, not 8-byte). `DiscContentPC\MKLauncher.exe` is a separate
+  launcher/config stub; its exact function couldn't be determined from
+  static strings alone. Install structure is **flat** (`DiscContentPC\`
+  holds everything directly) rather than MKX's `Binaries\Retail\` nesting.
+- **No PDB anywhere in the install** — searched recursively, none found.
+  This is the single biggest negative finding relative to MKX, where a
+  shipped `MK10.pdb` made static symbol-mining via `dbghelp` possible at
+  all. **No such shortcut exists here.** A future Phase 2 (live memory
+  reads) would need to find addresses the hard way — pattern scanning,
+  manual reverse engineering, or cross-referencing community Cheat Engine
+  tables — much closer to the Deadly Alliance/Deception GameCube projects'
+  situation than MKX's.
+- **No anti-cheat** (no EasyAntiCheat/BattlEye files found) — same
+  low-risk situation as MKX for external memory reading.
+- **Same NetherRealm UE3-derived engine lineage as MKX, strongly
+  corroborated**: `DiscContentPC\Config\Coalesced.ini` (same filename
+  convention), per-language `Coalesced.{eng,fra,int,por,spa}` variants,
+  `DiscContentPC\Asset\` with 1,229 `.xxx`-renamed cooked assets using an
+  `AVA_<CharacterName>` naming pattern (same renamed-cooked-package
+  obfuscation convention MKX's `Asset\` folder uses). `PhysXLoader.dll`/
+  `PhysXCooking.dll`/`PhysXCore.dll` (PhysX 3.x-era) and `binkw32.dll`
+  (32-bit Bink Video) are also consistent with a UE3-era title. Direct
+  `strings` scans of `MKKE.exe` for "Unreal"/"Scaleform" came back empty —
+  same inconclusive (not negative) result MKX had, likely packed/compressed
+  PE sections defeating a naive grep either way.
+- **Extensive, mature, multi-year community precedent**: public Cheat
+  Engine tables and commercial trainers specifically targeting `MKKE.exe`
+  exist from FearLess Revolution (most recently updated August 2025),
+  Cheat Happens, MrAntiFun, an "FTS" trainer, GameCopyWorld, and ggmania.
+  This independently confirms `MKKE.exe` as the correct, stable process
+  name and that external memory reading against it is thoroughly
+  well-trodden — arguably even more so than MKX had, given the longer
+  track record.
+- **Not checked** (deliberately, per plan — live process/window inspection
+  needs the game actually launched, held for a later phase with explicit
+  go-ahead): window class, live behavior, whether Scaleform/GFx is
+  definitively the UI middleware.
 
 ## Resume point
 
