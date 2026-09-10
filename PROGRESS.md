@@ -115,7 +115,46 @@ Game-specific differences from the MKX original:
   MKX) — this OCR baseline is the plan, not a stopgap for something
   faster.
 
-### Phase 2 — Live memory reads (harder here than MKX — no PDB)
+### Phase 2 outlook — CORRECTED UPWARD (2026-09-10)
+
+**The assessment below (written earlier the same day) was based on a
+false negative and understates this phase's viability.** It assumed the
+NetherRealm engine was a heavily-renamed UE3 fork with no stock object
+model to grab onto. Re-checking MKX's shipped PDB properly — the earlier
+search had used anchored regexes at a point when the search script had a
+trailing-whitespace bug that silently broke them — shows the **stock UE3
+object model is essentially intact**:
+
+- `GEngine` (+0x347ECA0), `GWorld` (+0x347FB08)
+- **`UObject::GObjObjects` (+0x38004B0)** — the UE3 global object array
+- The full stock bookkeeping set: `GObjHash`, `GObjHashOuter`,
+  `GObjLoaded`, `GObjTransientPkg`, `GObjAvailable`, `GObjInitialized`
+- The complete `FNameEntry` system (`GetName`/`GetIndex`/`GetHashNext`,
+  `TArray<FNameEntry*>` pool) and `TArray<UObject*>` containers
+
+Only the *game-specific UI classes* are custom-named; the engine
+substrate is recognisable UE3. Two consequences for MK9:
+
+1. **Standard UE3 SDK-dumper technique applies** — pattern-locate
+   `GObjObjects` and the FName pool, walk the `UObject` hierarchy, read
+   class names and properties. A missing PDB removes the shortcut of free
+   symbol names; it does **not** remove the technique. This is
+   well-trodden tooling territory for 32-bit UE3 titles specifically.
+2. **MKX's PDB is a Rosetta Stone for MK9.** Same engine family, and MKX
+   has full symbols. Known struct shapes from MKX — e.g.
+   `UIGridSelectionCursor`, 16 bytes: `selectionTableIndex`, `bIsActive`,
+   `bIsSelected`, `bCursorHidden` — turn blind reverse engineering on MK9
+   into hunting a *known shape*, validatable instantly (move the menu
+   cursor, watch the int change 0→1→2).
+
+**This likely makes memory reading the primary path for MK9, with the
+Phase 1 OCR reader as the fallback rather than the main mechanism** — the
+inverse of how this project was originally sequenced. The OCR reader
+already built is not wasted; it becomes the fallback backend behind a
+`StateProvider` seam, letting screens convert to exact memory reads one
+at a time instead of as a big-bang rewrite.
+
+### Phase 2 (original, now-superseded assessment) — "harder here than MKX — no PDB"
 
 Without a shipped PDB, this phase needs one of:
 - Cross-referencing the existing community Cheat Engine tables for `MKKE.exe`
