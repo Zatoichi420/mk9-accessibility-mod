@@ -79,7 +79,66 @@ for the full precedent. In short:
   go-ahead): window class, live behavior, whether Scaleform/GFx is
   definitively the UI middleware.
 
+## Phased plan
+
+### Phase 0 — Research & feasibility (mostly done via static analysis above)
+
+Remaining: launch the game and confirm `MKKE.exe` is genuinely the live
+process (not `MKLauncher.exe`), check its window class for engine
+confirmation, and note whether it reaches an interactive menu on its own or
+needs the same kind of input MKX's title screen turned out to need. Hold
+for explicit go-ahead before launching, matching how MKX's Phase 0 handled
+this the same way.
+
+### Phase 1 — Guaranteed-feasible baseline: OCR + reference library
+
+Port `mkx-accessibility-mod`'s `ocr_reader/` (`main.py`, `screen_library.py`,
+`nvda_controller_client/`) near-verbatim, retargeted at `MKKE.exe`. This is
+the *higher-confidence* path here than it even was for MKX, precisely
+*because* there's no PDB shortcut tempting a jump straight to Phase 2 — OCR
+doesn't care whether debug symbols exist. Same caveats apply as MKX's own
+Phase 1: highlight-color thresholds will need calibrating against this
+game's actual UI (different color scheme, don't assume MKX's or Legacy
+Kollection's values transfer), and `known_screens/` starts empty.
+
+### Phase 2 — Live memory reads (harder here than MKX — no PDB)
+
+Without a shipped PDB, this phase needs one of:
+- Cross-referencing the existing community Cheat Engine tables for `MKKE.exe`
+  (confirmed to exist, multiple sources) for known-good addresses, then
+  pattern-scanning outward from those for menu/cursor state specifically
+  (the public tables focus on gameplay values like health/timer, not menu
+  navigation — menu offsets would still need original work).
+- Manual reverse engineering via a disassembler (Ghidra), the same
+  fallback Legacy Kollection's `proxy_dll/` attempt represents elsewhere in
+  this project family — accepting it's slower without symbol names to
+  anchor on.
+- Remember `MKKE.exe` is **32-bit** — pointer size, calling convention, and
+  any ported tooling (e.g. MKX's `tools/dump_pdb_symbols.py`-style scripts)
+  need real adjustment, not a blind copy.
+
+This phase is explicitly lower-confidence than MKX's equivalent going in —
+say so plainly if asked for a timeline, rather than implying PDB-free
+reverse engineering is as fast as PDB-assisted was.
+
+### Phase 3 — Calibration and hardening
+
+Build out `known_screens/` for main menu, mode select, character select,
+options, with the same per-screen review-before-going-live discipline as
+the sister projects.
+
+## Out of scope for v1
+
+Online play/matchmaking, live round-by-round fight narration. Mirrors the
+precedent set across the whole project family.
+
 ## Resume point
 
-Repo just created. Next: fold in the Phase 0 findings once the file
-investigation completes, then decide the concrete next technical step.
+Phase 0's static analysis is essentially done and found a clearly different
+risk profile than MKX (no PDB, 32-bit, but strong community precedent and
+the same engine lineage). Nothing has been done toward Phase 1 yet - no
+`ocr_reader/` port, no live game launch. Next concrete step: either launch
+the game to confirm the live process/engine (needs explicit go-ahead), or
+start the Phase 1 OCR port directly (doesn't need the game running to
+begin - the sister project's code can be adapted and reviewed before ever
+launching MKKE.exe).
