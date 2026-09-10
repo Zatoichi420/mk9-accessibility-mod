@@ -92,14 +92,28 @@ this the same way.
 
 ### Phase 1 — Guaranteed-feasible baseline: OCR + reference library
 
-Port `mkx-accessibility-mod`'s `ocr_reader/` (`main.py`, `screen_library.py`,
-`nvda_controller_client/`) near-verbatim, retargeted at `MKKE.exe`. This is
-the *higher-confidence* path here than it even was for MKX, precisely
-*because* there's no PDB shortcut tempting a jump straight to Phase 2 — OCR
-doesn't care whether debug symbols exist. Same caveats apply as MKX's own
-Phase 1: highlight-color thresholds will need calibrating against this
-game's actual UI (different color scheme, don't assume MKX's or Legacy
-Kollection's values transfer), and `known_screens/` starts empty.
+**Done (2026-09-10), scaffolded and syntax-checked, not yet live-tested.**
+Ported `mkx-accessibility-mod`'s `ocr_reader/` (`main.py`,
+`screen_library.py`, `nvda_controller_client/`) near-verbatim, retargeted
+at `MKKE.exe`. Also brought over `install.bat`/`uninstall.bat` (the
+Startup-folder-shortcut one-click setup, not Task Scheduler) and
+`requirements.txt`. Verified `py_compile` clean; all dependencies
+(pywin32/pillow/numpy/winsdk) already installed from the sister projects.
+
+Game-specific differences from the MKX original:
+- `PROCESS_NAME = "MKKE.exe"` — per Phase 0 static analysis + community
+  Cheat Engine precedent, **not yet confirmed via an actual live launch**
+  on this machine, unlike MKX's equivalent line (which was launch-tested
+  before being written that confidently).
+- `known_screens/` starts empty — nothing captured/verified yet.
+- Highlight-color thresholds (`BRIGHTNESS_THRESHOLD`/
+  `BLUE_MINUS_RED_THRESHOLD`) are the **same placeholder values that have
+  now passed unchanged through three different games' codebases**
+  (Legacy Kollection → MKX → here) — flagged `NEEDS_CALIBRATION` in the
+  code. MK9's actual UI colors have never been sampled.
+- No Phase 2 memory-reading shortcut exists yet (no shipped PDB, unlike
+  MKX) — this OCR baseline is the plan, not a stopgap for something
+  faster.
 
 ### Phase 2 — Live memory reads (harder here than MKX — no PDB)
 
@@ -134,11 +148,14 @@ precedent set across the whole project family.
 
 ## Resume point
 
-Phase 0's static analysis is essentially done and found a clearly different
-risk profile than MKX (no PDB, 32-bit, but strong community precedent and
-the same engine lineage). Nothing has been done toward Phase 1 yet - no
-`ocr_reader/` port, no live game launch. Next concrete step: either launch
-the game to confirm the live process/engine (needs explicit go-ahead), or
-start the Phase 1 OCR port directly (doesn't need the game running to
-begin - the sister project's code can be adapted and reviewed before ever
-launching MKKE.exe).
+Phase 0 (static analysis) and Phase 1 (OCR/NVDA reader baseline) are both
+done. **Nothing has been launched or tested live yet** — `PROCESS_NAME`
+is an educated, well-corroborated guess (`MKKE.exe`), not a confirmed
+fact, and the highlight-color thresholds are known-wrong placeholders.
+Next concrete step: launch the game (needs explicit go-ahead, matching
+MKX's own Phase 0 discipline) to confirm the live process name, see
+whether it reaches an interactive menu on its own or needs the kind of
+input MKX's title screen turned out to need, and get real screenshots to
+seed `known_screens/` and calibrate highlight detection. Remember: any
+reader instance needs to be started by the user directly, not launched by
+Claude, for its hotkeys to work (see [[environment_hotkey_limitation]]).
