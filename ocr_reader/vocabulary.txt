@@ -1,0 +1,55 @@
+# Words and phrases Mortal Kombat Komplete Edition (MK9) shows on screen.
+# Live OCR text close to one of these (see menu_ocr.snap) is replaced by
+# it. One phrase per line, as on screen. Library entries' canonical text is
+# added automatically. Keep this to text actually seen in the game: an
+# invented phrase can pull a misreading towards the wrong word.
+
+# Common
+PRESS START
+PRESS ANY BUTTON
+BACK
+SELECT
+CONFIRM
+CANCEL
+YES
+NO
+ON
+OFF
+LOADING
+
+# Fighters (MK9 roster incl. Komplete Edition DLC)
+SCORPION
+SUB-ZERO
+LIU KANG
+KUNG LAO
+JOHNNY CAGE
+SONYA
+JAX
+KANO
+RAIDEN
+REPTILE
+MILEENA
+KITANA
+JADE
+BARAKA
+ERMAC
+NOOB SAIBOT
+SMOKE
+CYBER SUB-ZERO
+SEKTOR
+CYRAX
+NIGHTWOLF
+SINDEL
+STRYKER
+KABAL
+SHEEVA
+QUAN CHI
+SHANG TSUNG
+KENSHI
+SKARLET
+RAIN
+FREDDY KRUEGER
+KRATOS
+KINTARO
+GORO
+SHAO KAHN
