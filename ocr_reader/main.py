@@ -8,7 +8,7 @@ image hash - see game_a11y_core/screen_library.py, "the hook"): a match
 speaks that screen's pre-verified canonical_text instead of live OCR,
 which is both faster and immune to this game's various OCR failure modes
 (stylized/compressed fonts that Windows OCR mangles or misses entirely -
-see docs/PROGRESS.md section 5 for why this replaced the original OCR-only
+see PROGRESS.md for why this replaced the original OCR-only
 design).
 
 If no library entry matches, falls back to live OCR as a best-effort read,
@@ -103,10 +103,10 @@ OCR_MISSING_MESSAGE = (
     "The read me explains how to add it."
 )
 
-# Calibrated against this game's menu highlight style: selected items are
-# rendered cyan/blue (~RGB 105,200,230), unselected gold/yellow
-# (~RGB 240,212,126). Blue-channel-exceeds-red-channel cleanly separates
-# the two - see docs/PROGRESS.md for the sampled values.
+# NEEDS_CALIBRATION: these are the Legacy Kollection launcher's values
+# (selected text cyan, unselected gold), not sampled from MK9 yet. If they
+# don't match MK9's menus the highlighted item isn't announced on its own,
+# but nothing wrong is said either, and F9 reads the whole screen.
 HIGHLIGHT_BRIGHTNESS_THRESHOLD = 300
 HIGHLIGHT_BLUE_MINUS_RED_THRESHOLD = 30
 

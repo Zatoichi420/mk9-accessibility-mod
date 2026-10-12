@@ -8,9 +8,9 @@ MK9_ACCESS_DATA_DIR pointed at a temp folder.
   1. --self-test passes and finds the screen library.
   2. Background start, waits for the game, --stop shuts it down cleanly.
   3. A second copy refuses to run alongside the first.
-  4. End to end: a stand-in game window (fake_game.py) shows library
-     screens at 960x540; the reader must find it and speak each screen's
-     verified text.
+  4. End to end: a stand-in game window (fake_game.py) shows two synthetic
+     library screens at 960x540; the reader must find it and speak each
+     screen's verified text.
   5. Setup.exe installs silently (per-user, with start-at-sign-in), and the
      uninstaller removes the files and the sign-in entry again.
 
@@ -116,24 +116,55 @@ def test_background_and_stop():
     check(after.returncode == 0, "--stop with nothing running exits 0")
 
 
-def test_end_to_end_with_fake_game():
-    screens = ["launcher__main_menu", "mk2__choose_your_fighter"]
+def make_test_screens(directory):
+    """Two synthetic library screens, written to the reader's user library.
+    This game's shipped library may still be empty, and the test is about
+    the find-capture-match-speak pipeline, not any particular menu."""
+    from PIL import Image, ImageDraw
+
+    os.makedirs(directory, exist_ok=True)
+    shapes = {
+        "ci__screen_one": lambda d: d.rectangle((0, 0, 959, 1079), fill=(230, 230, 230)),
+        "ci__screen_two": lambda d: [d.rectangle((0, y, 1919, y + 89), fill=(230, 230, 230)) for y in range(0, 1080, 180)],
+    }
     expected = {}
-    for name in screens:
-        with open(os.path.join(KNOWN, name + ".json"), encoding="utf-8") as f:
-            expected[name] = ". ".join(json.load(f)["canonical_text"])
+    for name, draw in shapes.items():
+        img = Image.new("RGB", (1920, 1080))
+        draw(ImageDraw.Draw(img))
+        img.save(os.path.join(directory, name + ".png"))
+        text = ["CI TEST " + name.split("__")[1].replace("_", " ").upper()]
+        with open(os.path.join(directory, name + ".json"), "w", encoding="utf-8") as f:
+            json.dump({"screen_id": name, "canonical_text": text, "capture_size": [1920, 1080]}, f)
+        expected[name] = ". ".join(text)
+    return expected
+
+
+def test_end_to_end_with_fake_game():
+    data = DataDir("e2e")
+    library = os.path.join(data.path, "known_screens")
+    expected = make_test_screens(library)
+    screens = list(expected)
 
     # A python.exe renamed to the game's process name, next to the original
-    # so it still finds its DLLs and installed packages.
-    base_dir = os.path.dirname(sys.executable)
+    # so it still finds its DLLs and installed packages. In a virtual
+    # environment python.exe is only a launcher that starts the real
+    # interpreter as a second process, so the window would belong to a
+    # process with another name: copy the real one and point it at the
+    # environment's packages instead.
+    real_python = getattr(sys, "_base_executable", None) or sys.executable
+    game_env = dict(os.environ)
+    if os.path.normcase(real_python) != os.path.normcase(sys.executable):
+        import site
+        game_env["PYTHONPATH"] = os.pathsep.join(site.getsitepackages())
+    base_dir = os.path.dirname(real_python)
     fake_exe = os.path.join(base_dir, "MKKE.exe")
-    shutil.copy2(sys.executable, fake_exe)
+    shutil.copy2(real_python, fake_exe)
 
-    data = DataDir("e2e")
     control = os.path.join(data.path, "show.txt")
     with open(control, "w", encoding="utf-8") as f:
-        f.write(os.path.join(KNOWN, screens[0] + ".png"))
-    game = subprocess.Popen([fake_exe, os.path.join(ROOT, "packaging", "ci", "fake_game.py"), control, "960", "540"])
+        f.write(os.path.join(library, screens[0] + ".png"))
+    game = subprocess.Popen([fake_exe, os.path.join(ROOT, "packaging", "ci", "fake_game.py"), control, "960", "540"],
+                            env=game_env)
     reader = data.start("--speech", "none", "--ignore-focus")
     try:
         check(wait_for(lambda: "SPEAK: Game window found." in data.log(), 30), "reader finds the stand-in game window by process name")
@@ -141,7 +172,7 @@ def test_end_to_end_with_fake_game():
         check(wait_for(lambda: f"SPEAK: {expected[screens[0]]}" in data.log(), 20), f"speaks {screens[0]} from the library")
 
         with open(control, "w", encoding="utf-8") as f:
-            f.write(os.path.join(KNOWN, screens[1] + ".png"))
+            f.write(os.path.join(library, screens[1] + ".png"))
         check(wait_for(lambda: f"SPEAK: {expected[screens[1]]}" in data.log(), 20), f"speaks {screens[1]} after the screen changes")
 
         os.remove(control)  # fake game quits

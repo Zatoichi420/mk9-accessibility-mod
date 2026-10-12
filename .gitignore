@@ -1,36 +1,22 @@
-
-!ocr_reader/library_misses/.gitkeep
-# %LOCALAPPDATA%\MKLegacyKollectionAccess; kept for older checkouts.
-# (a handful of these were hand-reviewed and promoted into known_screens/ already)
-# (anchored to repo root - proxy_dll/tools/ has its own real source scripts, kept)
-# C++ build output - regenerate with CMake, don't need to ship it
-# Claude Code local session config
-# Dev/calibration scratch captures - large, superseded by ocr_reader/known_screens/
-# Developer-mode (F2) full-screen review images - only the cropped .png is a library file
-# Downloaded third-party tool, not project source (55MB radare2 build)
-# Packaging output (packaging/build.py)
 # Python
-# Runtime output, not source. The reader now writes these under
-# Stray empty file from an earlier session, not real content
-# Vendored third-party dependency (MinHook) - re-fetched by CMake, not project source
+__pycache__/
 *.pyc
-.claude/
+.venv/
+.pytest_cache/
+
+# Packaging output (packaging/build.py)
 /build/
 /dist/
-/nul
-/ocr_reader/*.png
-/tools/
-__pycache__/
-ocr_reader/known_screens/*.full.png
-ocr_reader/library_misses/
-ocr_reader/library_misses/*
-ocr_reader/reader.lock
-ocr_reader/reader_log.txt
-ocr_reader/sequence/
-ocr_reader/sequence_tabbar/
-proxy_dll/build/
-proxy_dll/third_party/
-proxy_dll/tools/*.exe
-proxy_dll/tools/*.obj
+
+# Runtime output, not source. The reader writes these under
+# %LOCALAPPDATA%\MK9KompleteAccess now; kept for older checkouts.
 reader.lock
 reader_log.txt
+ocr_reader/library_misses/*
+!ocr_reader/library_misses/.gitkeep
+
+# Developer-mode (F2) full-screen review images - only the cropped .png is a library file
+ocr_reader/known_screens/*.full.png
+
+# Claude Code local session config
+.claude/

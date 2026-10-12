@@ -28,6 +28,26 @@ MB_SETFOREGROUND = 0x10000
 MB_TOPMOST = 0x40000
 
 
+def _shipped_library_count():
+    """Verified screens shipped with the reader. A game whose library is
+    still empty (everything read by live OCR) is not a broken install."""
+    directory = app_paths.bundled_known_screens_dir()
+    count = 0
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return 0
+    for name in names:
+        if name.endswith(".json") and os.path.isfile(os.path.join(directory, name[:-5] + ".png")):
+            try:
+                with open(os.path.join(directory, name), encoding="utf-8") as f:
+                    if json.load(f).get("canonical_text"):
+                        count += 1
+            except (OSError, ValueError):
+                count += 1  # unreadable but shipped: the load check should flag it
+    return count
+
+
 def _check_library():
     from PIL import Image
 
@@ -95,7 +115,9 @@ def run_self_test(args, speaker):
         count, mismatches = 0, [repr(exc)]
     report["library_entries"] = count
     report["library_mismatches"] = mismatches
-    if count == 0:
+    shipped = _shipped_library_count()
+    report["library_shipped"] = shipped
+    if count == 0 and shipped:
         problems.append("The screen library didn't load. Reinstall the reader.")
     elif mismatches:
         problems.append(f"{len(mismatches)} known screens failed their recognition check.")

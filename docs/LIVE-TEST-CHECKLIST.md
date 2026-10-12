@@ -11,11 +11,10 @@ log line confirms it, for when speech alone isn't conclusive.
 
 ## Before you start
 
-- [ ] Remove the old Steam launch option if it's still set: the game's
-      Properties, General, Launch Options, which held a line containing
-      `start_reader.vbs`. Leave the box empty. The installed reader replaces
-      it, and the old script no longer exists in the repo.
 - [ ] Close any old `python main.py` reader that's still running.
+- [ ] Answer the Windows Firewall prompt for MKKE if it appears (Cancel
+      keeps the game offline; menus are unaffected). While it's open the
+      game stays minimised and nothing can be read.
 
 ## 1. Install
 
@@ -30,46 +29,27 @@ log line confirms it, for when speech alone isn't conclusive.
 
 - [ ] Start menu, **Check accessibility reader**: NVDA reads the message box.
       It should say Self-test passed, Voice NVDA, a text recognition
-      language, 18 known screens, Reader running, Start at sign-in on.
+      language, Reader running, Start at sign-in on. With no known screens
+      yet, it must not say the library didn't load.
 
 ## 3. The game, with NVDA (most important)
 
 - [ ] Start the game from Steam: you hear "Game window found."
-- [ ] Log: `Game capture size: 1920x1080` (**not** 1280x720). This confirms
-      the scaling fix. Note the size you actually got.
-- [ ] Main menu is read in full.
-- [ ] Play menu, Game Library, and the tabs (All/Arcade/Console): each
-      screen is read, and moving between tabs speaks the selected tab.
-- [ ] MK1 and MK2 game menus: screen read, and moving the cursor speaks each
-      item (Play Game, Versus, Training, ...).
-- [ ] Quit Game dialog (open it, then cancel).
-- [ ] MK2 arcade: Choose Your Fighter, pause menu. If you can, also the
-      continue screen and Prepare For Your Next Kombat. These two used to be
-      too similar; check each is read as itself.
-- [ ] A screen that isn't in the library (Options, Extras or Credits) gets a
-      best-effort read. It should now include text from the right side and
-      bottom of the screen that used to be cut off.
+- [ ] Log: `Window capture is blank (fullscreen game?); capturing the screen
+      under the window instead.` then `Game capture size: 1920x1080` (or
+      your screen's full size). Note the size you actually got.
+- [ ] Title screen and main menu are read in full.
+- [ ] Moving through the main menu speaks each item. If it doesn't, the
+      highlight colour needs calibrating: send a few `library_misses`
+      images.
+- [ ] Options and its sub-screens: each screen is read.
+- [ ] Pause menu in a fight is read; the fight itself is quiet.
+- [ ] Character select: note what is read when moving between fighters.
 - [ ] F9 re-reads. F10 says "Reader off.", F10 again says "Reader on."
 - [ ] Alt+Tab to another window: the reader goes quiet (log: `Game is not
       the focused window`). Alt+Tab back: the current screen is read again.
-- [ ] Press F10 while in another app (Notepad, say): nothing happens, and it
-      doesn't toggle the reader later when you return to the game.
-
-## 3b. Added overnight 2026-10-11 (check these especially)
-
-- [ ] Game Library: move left and right with the controller stick and the
-      d-pad. Each game is read as name, year and platform, once it stops
-      moving. The four "Mortal Kombat, 1993" versions each say their own
-      platform.
-- [ ] Any game's pause menu (Escape): read in full, then each item as you
-      move. Moves List reads each fighter's moves. Reset Game and Quit Game
-      dialogs read "No" and "Yes" as you move between them.
-- [ ] Options: each setting is read with its value; changing a value with
-      left or right announces the new value.
-- [ ] Arcade Mortal Kombat and Mortal Kombat II character select: moving the
-      selection reads each fighter's name.
-- [ ] During a fight the reader stays quiet.
-- [ ] The Krypt: Documentary, Lore, Kombatants and Music Player are read.
+- [ ] Press F10 while in another app: nothing happens, and it doesn't
+      toggle the reader later when you return to the game.
 
 ## 4. Without NVDA
 
@@ -85,7 +65,7 @@ log line confirms it, for when speech alone isn't conclusive.
 - [ ] Quit NVDA and start JAWS. Start the game: "Game window found." is
       spoken by JAWS, in the JAWS voice, with no Windows voice on top.
       Log: `Speech output is now: JAWS`.
-- [ ] Move through the launcher menus: each item is spoken by JAWS.
+- [ ] Move through the main menu: each screen is spoken by JAWS.
 - [ ] Start menu, **Check accessibility reader**: says Voice JAWS. The result
       is read once, by JAWS, not twice.
 - [ ] Quit JAWS while the game is open: speech moves to the Windows voice.
