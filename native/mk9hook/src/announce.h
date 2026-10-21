@@ -6,8 +6,9 @@ namespace announce {
 // Reads mk9hook.ini and starts speech.
 void Start();
 
-// A text value was written to the menu at path (UTF-8, path as the game gave it).
-void OnText(const char* path, const char* text);
+// A text value was written to the menu at path (UTF-8, path as the game gave
+// it). movie identifies the Flash movie, since screens reuse the same names.
+void OnText(const char* path, const char* text, const void* movie);
 
 // The game called method path (for example "_root.MainNav.Nav.gotoAndPlay")
 // with firstArg as its first argument ("" if none; numbers as digits).

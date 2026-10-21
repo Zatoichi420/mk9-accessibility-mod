@@ -26,6 +26,14 @@ CreateDevice_t o_CreateDevice;
 GetDeviceState_t o_GetDeviceState;
 GetDeviceData_t o_GetDeviceData;
 LONG g_stateCalls, g_dataCalls;
+// Every DirectInput device shares these hooks; script keys go to keyboards only.
+void* g_keyboards[8];
+volatile LONG g_keyboardCount;
+
+bool IsKeyboard(void* device) {
+    for (LONG i = 0; i < g_keyboardCount && i < 8; i++) if (g_keyboards[i] == device) return true;
+    return false;
+}
 
 struct DIDEVICEOBJECTDATA_ {
     DWORD dwOfs, dwData, dwTimeStamp, dwSequence;
@@ -35,7 +43,7 @@ struct DIDEVICEOBJECTDATA_ {
 HRESULT __stdcall h_GetDeviceState(void* self, DWORD size, void* data) {
     HRESULT hr = o_GetDeviceState(self, size, data);
     if (InterlockedIncrement(&g_stateCalls) == 1) LogLine("INPUT DirectInput GetDeviceState in use (size %lu)", size);
-    if (size == 256 && g_injecting) {
+    if (size == 256 && g_injecting && IsKeyboard(self)) {
         // A keyboard: merge in script-held keys. The device may be
         // unacquired while the game is in the background; report success.
         uint8_t* k = (uint8_t*)data;
@@ -56,7 +64,7 @@ HRESULT __stdcall h_GetDeviceData(void* self, DWORD objSize, void* data, DWORD* 
     DWORD capacity = count ? *count : 0;
     HRESULT hr = o_GetDeviceData(self, objSize, data, count, flags);
     if (InterlockedIncrement(&g_dataCalls) == 1) LogLine("INPUT DirectInput GetDeviceData in use (objSize %lu)", objSize);
-    if (!g_injecting || !count || !data || objSize < sizeof(DWORD) * 4 || (flags & 1 /* DIGDD_PEEK */)) return hr;
+    if (!g_injecting || !IsKeyboard(self) || !count || !data || objSize < sizeof(DWORD) * 4 || (flags & 1 /* DIGDD_PEEK */)) return hr;
     EnterCriticalSection(&g_bufLock);
     DWORD have = SUCCEEDED(hr) ? *count : 0;
     DWORD room = capacity > have ? capacity - have : 0;
@@ -79,6 +87,8 @@ HRESULT __stdcall h_CreateDevice(void* self, REFGUID guid, void** device, void* 
     HRESULT hr = o_CreateDevice(self, guid, device, outer);
     if (SUCCEEDED(hr) && device && *device) {
         LogLine("INPUT DirectInput device created {%08lX-...}", guid.Data1);
+        // GUID_SysKeyboard and its variants share Data1 0x6F1D2B61.
+        if (guid.Data1 == 0x6F1D2B61 && g_keyboardCount < 8) g_keyboards[InterlockedIncrement(&g_keyboardCount) - 1] = *device;
         void** vtbl = *(void***)*device;
         if (!o_GetDeviceState) {
             MH_CreateHook(vtbl[9], (void*)h_GetDeviceState, (void**)&o_GetDeviceState);

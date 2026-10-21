@@ -153,6 +153,26 @@ controller input:
 | Move list | `_root.UpdateHighlight(2 × row)` | "Uppercut, down plus back punch" |
 | Challenge Tower | `challengeInfo.gotoAndPlay("focusOn")` | "Challenge 2, Training: Defense, reward 100 koins" |
 | Krypt | `locationLabel`, `purchaseInfo.label` | area name; item ahead and its cost |
+| Video, Keyboard settings | `optionN`/`btnN.gotoAndPlay("HighlightOn")` | "FRONT PUNCH, T, numpad 7" |
+| Practice pause menu, Practice/AI Options | `mc_option_N.FocusGain()`, `optionN` HighlightOn | "PRACTICE OPTIONS", "DAMAGE INFO, ON" |
+| Continue screen | `mc_option_N.FocusGain()` | "CONTINUE?", "RETRY" |
+| Player 2 pick, costumes, tag partner | `name_p2`, `AltCostumeSideN.nameGroup.text` | "Player 2, choose your fighter"; "LIU KANG and SCORPION" |
+| Tutorial and challenges | `practiceHUD.messageBox`, `moveNameAnim.move_name`, `*TextAnim.Body.Text`, `TaskSuccess` | lesson cards, the move to do, "Done!", dialogue "Jax: …" |
+
+Screens reuse the same names (the pause menu and the continue screen both
+have `mc_option_1`), so each stored text remembers its movie and an item is
+read only from the movie that wrote to it last.
+
+## Arcade Kollection (MKHDGame.exe), tried 2026-10-20
+
+The same Scaleform GFx 3 code, so the DLL has a second address table for it
+(`g_arcadeTargets`) and all hooks attach without Games for Windows Live
+objecting. But its menus are built from Scaleform CLIK components, which
+move the highlight inside ActionScript without calling the game, and almost
+nothing reached the hooks. The scripted test input didn't move its menus
+either. The DLL was removed from its folder again; reading its menus needs
+another hook point (CLIK focus or the text renderer) and a session with
+someone at the keyboard.
 
 Highlights are spoken ~60 ms after the game makes them, so the frame can
 finish filling in names and titles. A run of highlights closer together

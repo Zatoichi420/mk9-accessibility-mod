@@ -189,7 +189,7 @@ static bool __fastcall h_SetVariable(void* self, void* edx, const char* path, co
     if (changed) g_lastValue[key] = v;
     LeaveCriticalSection(&g_logLock);
     if (changed) LogLine("SET  movie=%p %s = %s", self, p.c_str(), v.c_str());
-    if (ValueText(value, vbuf, sizeof(vbuf))) announce::OnText(pbuf, vbuf);
+    if (ValueText(value, vbuf, sizeof(vbuf))) announce::OnText(pbuf, vbuf, self);
     return o_SetVariable(self, edx, path, value, setType);
 }
 
@@ -285,7 +285,11 @@ static bool __fastcall h_InvokeOther(void* self, void* edx, const char* method, 
 typedef bool(__fastcall* GetVariable_t)(void* self, void* edx, GFxValue* out, const char* path);
 static GetVariable_t o_GetVariable;
 static CRITICAL_SECTION g_pathLock;
-static std::unordered_map<void*, std::string> g_objectPaths;
+struct ObjectInfo {
+    std::string path;
+    void* movie;
+};
+static std::unordered_map<void*, ObjectInfo> g_objectPaths;
 
 static void* ObjectData(const GFxValue* v) {
     __try {
@@ -304,7 +308,7 @@ static bool __fastcall h_GetVariable(void* self, void* edx, GFxValue* out, const
             CopyStr(path, pbuf, sizeof(pbuf));
             EnterCriticalSection(&g_pathLock);
             if (g_objectPaths.size() > 20000) g_objectPaths.clear();
-            g_objectPaths[data] = pbuf;
+            g_objectPaths[data] = {pbuf, self};
             LeaveCriticalSection(&g_pathLock);
         }
     }
@@ -319,9 +323,13 @@ static bool __fastcall h_SetText(void* self, void* edx, void* object, const wcha
     char tbuf[2200];
     CopyWStr(text, tbuf, sizeof(tbuf));
     std::string path;
+    void* movie = nullptr;
     EnterCriticalSection(&g_pathLock);
     auto it = g_objectPaths.find(object);
-    if (it != g_objectPaths.end()) path = it->second;
+    if (it != g_objectPaths.end()) {
+        path = it->second.path;
+        movie = it->second.movie;
+    }
     LeaveCriticalSection(&g_pathLock);
     if (path.empty()) {
         char p[32];
@@ -329,7 +337,7 @@ static bool __fastcall h_SetText(void* self, void* edx, void* object, const wcha
         LogLine("TEXT %s = \"%s\"%s", p, tbuf, html ? "  (html)" : "");
     } else {
         LogLine("TEXT %s = \"%s\"%s", path.c_str(), tbuf, html ? "  (html)" : "");
-        announce::OnText(path.c_str(), tbuf);
+        announce::OnText(path.c_str(), tbuf, movie);
     }
     return o_SetText(self, edx, object, text, html);
 }
@@ -359,7 +367,7 @@ static bool __fastcall h_ObjInvoke(void* self, void* edx, void* object, GFxValue
     std::string path;
     EnterCriticalSection(&g_pathLock);
     auto it = g_objectPaths.find(object);
-    if (it != g_objectPaths.end()) path = it->second;
+    if (it != g_objectPaths.end()) path = it->second.path;
     LeaveCriticalSection(&g_pathLock);
     if (path.empty()) {
         LogLine("OBJ  (object %p).%s (%s)", object, nbuf, argText);
@@ -374,13 +382,14 @@ static bool __fastcall h_ObjInvoke(void* self, void* edx, void* object, GFxValue
 
 struct Target {
     const char* name;
-    uintptr_t va;            // address in MKKE.exe built 2014-08-01 (base 0x400000)
+    uintptr_t va;            // address in the game exe (base 0x400000)
     uint8_t sig[12];
     void* detour;
     void** original;
 };
 
-static Target g_targets[] = {
+// Mortal Kombat Komplete Edition, MKKE.exe built 2014-08-01.
+static Target g_mk9Targets[] = {
     {"SetVariable", 0xAC7810, {0x83, 0xEC, 0x18, 0x56, 0x8B, 0xF1, 0x83, 0x7E, 0x30, 0x00, 0x75, 0x09}, (void*)h_SetVariable, (void**)&o_SetVariable},
     {"InvokeVa",    0xAA1EA0, {0x53, 0x56, 0x8B, 0xF1, 0x85, 0xF6, 0x74, 0x08, 0xFF, 0x46, 0x04, 0x8D}, (void*)h_InvokeVa, (void**)&o_InvokeVa},
     {"InvokeOn",    0xABF7C0, {0x83, 0xEC, 0x10, 0x57, 0x8B, 0xF9, 0x83, 0x7F, 0x30, 0x00, 0x0F, 0x84}, (void*)h_InvokeOn, (void**)&o_InvokeOn},
@@ -389,12 +398,40 @@ static Target g_targets[] = {
     {"SetText",     0xA646A0, {0x83, 0xEC, 0x20, 0x55, 0x8B, 0x6C, 0x24, 0x28, 0x56, 0x57, 0x8B, 0xF9}, (void*)h_SetText, (void**)&o_SetText},
     {"ObjInvoke",   0xA64510, {0x83, 0xEC, 0x34, 0x80, 0x7C, 0x24, 0x4C, 0x00, 0x57, 0x8B, 0xF9, 0x8B}, (void*)h_ObjInvoke, (void**)&o_ObjInvoke},
 };
-static const DWORD kExpectedTimestamp = 1406923673;
 
-static bool IsExpectedGame(HMODULE exe) {
+// Mortal Kombat Arcade Kollection, MKHDGame.exe built 2012-02-15. Same
+// Scaleform GFx 3 code as MK9; only GFxMovieRoot's field offsets differ.
+static Target g_arcadeTargets[] = {
+    {"SetVariable", 0x1499270, {0x83, 0xEC, 0x18, 0x56, 0x8B, 0xF1, 0x83, 0x7E, 0x68, 0x00, 0x75, 0x09}, (void*)h_SetVariable, (void**)&o_SetVariable},
+    {"InvokeVa",    0x1415EB0, {0x53, 0x56, 0x8B, 0xF1, 0x85, 0xF6, 0x74, 0x08, 0xFF, 0x46, 0x04, 0x8D}, (void*)h_InvokeVa, (void**)&o_InvokeVa},
+    {"InvokeOn",    0x1491230, {0x83, 0xEC, 0x10, 0x57, 0x8B, 0xF9, 0x83, 0x7F, 0x68, 0x00, 0x0F, 0x84}, (void*)h_InvokeOn, (void**)&o_InvokeOn},
+    {"InvokeOther", 0x1418090, {0x53, 0x56, 0x8B, 0xF1, 0x85, 0xF6, 0x74, 0x08, 0xFF, 0x46, 0x04, 0x8D}, (void*)h_InvokeOther, (void**)&o_InvokeOther},
+    {"GetVariable", 0x1486320, {0x83, 0xEC, 0x18, 0x53, 0x57, 0x8B, 0xF9, 0x83, 0x7F, 0x68, 0x00, 0x0F}, (void*)h_GetVariable, (void**)&o_GetVariable},
+    {"SetText",     0x13B24D0, {0x83, 0xEC, 0x20, 0x55, 0x8B, 0x6C, 0x24, 0x28, 0x56, 0x57, 0x8B, 0xF9}, (void*)h_SetText, (void**)&o_SetText},
+    {"ObjInvoke",   0x13B2190, {0x83, 0xEC, 0x34, 0x80, 0x7C, 0x24, 0x4C, 0x00, 0x57, 0x8B, 0xF9, 0x8B}, (void*)h_ObjInvoke, (void**)&o_ObjInvoke},
+};
+
+struct Game {
+    const wchar_t* exe;
+    DWORD timestamp;  // PE header TimeDateStamp of the supported build
+    Target* targets;
+    size_t count;
+};
+static const Game kGames[] = {
+    {L"MKKE.exe", 1406923673, g_mk9Targets, _countof(g_mk9Targets)},
+    {L"MKHDGame.exe", 1329338420, g_arcadeTargets, _countof(g_arcadeTargets)},
+};
+static const Game* g_game;
+
+static const Game* FindGame(const wchar_t* exeName) {
+    for (auto& g : kGames) if (_wcsicmp(exeName, g.exe) == 0) return &g;
+    return nullptr;
+}
+
+static bool IsExpectedBuild(HMODULE exe) {
     auto dos = (IMAGE_DOS_HEADER*)exe;
     auto nt = (IMAGE_NT_HEADERS32*)((uint8_t*)exe + dos->e_lfanew);
-    return nt->FileHeader.TimeDateStamp == kExpectedTimestamp;
+    return nt->FileHeader.TimeDateStamp == g_game->timestamp;
 }
 
 static bool GameIsForeground() {
@@ -425,14 +462,15 @@ static DWORD WINAPI HotkeyThread(LPVOID) {
 
 static DWORD WINAPI InstallThread(LPVOID) {
     HMODULE exe = GetModuleHandleW(nullptr);
-    if (!IsExpectedGame(exe)) {
-        LogLine("Not the expected MKKE.exe build; no hooks installed.");
+    if (!IsExpectedBuild(exe)) {
+        LogLine("Not the expected %ls build; no hooks installed.", g_game->exe);
         return 0;
     }
     uintptr_t base = (uintptr_t)exe;
     announce::Start();
     input::Install();
-    for (auto& t : g_targets) {
+    for (size_t i = 0; i < g_game->count; i++) {
+        Target& t = g_game->targets[i];
         uint8_t* addr = (uint8_t*)(base + (t.va - 0x400000));
         if (memcmp(addr, t.sig, sizeof(t.sig)) != 0) {
             LogLine("SKIP %s: bytes don't match", t.name);
@@ -453,7 +491,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID) {
         GetModuleFileNameW(nullptr, exePath, MAX_PATH);
         const wchar_t* exeName = wcsrchr(exePath, L'\\');
         exeName = exeName ? exeName + 1 : exePath;
-        if (_wcsicmp(exeName, L"MKKE.exe") != 0) return TRUE;  // e.g. MKLauncher.exe: proxy only
+        g_game = FindGame(exeName);
+        if (!g_game) return TRUE;  // e.g. MKLauncher.exe: proxy only
 
         InitializeCriticalSection(&g_logLock);
         InitializeCriticalSection(&g_pathLock);
@@ -461,7 +500,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID) {
         g_gameDir = exePath;
         g_gameDir.resize(g_gameDir.rfind(L'\\'));
         g_log = _wfsopen((g_gameDir + L"\\mk9hook_log.txt").c_str(), L"a", _SH_DENYWR);
-        LogLine("---- mk9hook started ----");
+        LogLine("---- mk9hook started in %ls ----", g_game->exe);
         // MinHook must be ready before the game calls DirectInput8Create,
         // which can happen before InstallThread runs. MH_Initialize only
         // creates a private heap, so it is safe under the loader lock.

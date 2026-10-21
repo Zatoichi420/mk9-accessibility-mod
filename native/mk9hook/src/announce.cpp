@@ -30,6 +30,7 @@ const char* const kFocusLabels[] = {
 struct Entry {
     std::string text;  // cleaned
     unsigned long seq;
+    const void* movie;
 };
 
 std::mutex g_lock;
@@ -40,6 +41,8 @@ bool g_enabled = true;
 std::string g_lastObj, g_lastSaid, g_lastExtra;
 DWORD g_lastTick;
 DWORD g_lastTitleTick;     // a screen title was just spoken; let it finish
+bool g_player2Choosing;    // player 2's fighter cursor has been introduced
+std::string g_lastPauseItem;  // last pause-menu option, to re-announce on Back
 std::unordered_map<std::string, std::string> g_lastInRoot;  // "MainNav" -> last highlighted item
 std::unordered_map<std::string, int> g_slider;              // item -> slider position
 
@@ -93,7 +96,7 @@ const Token kTokens[] = {
     {"Away", "away"}, {"Toward", "toward"}, {"Towards", "toward"},
     {"FP", "front punch"}, {"BP", "back punch"}, {"FK", "front kick"}, {"BK", "back kick"},
     {"BL", "block"}, {"TG", "tag"}, {"TAG", "tag"}, {"SS", "switch stance"}, {"H", "hand to hand"}, {"W", "weapon"},
-    {"^", "jump"}, {",", ","}, {"+", "plus"}, {"-", "minus"},
+    {"^", "jump"}, {",", ","}, {"+", "plus"}, {"-", ""},  // [-] starts challenge objectives like a bullet
     {"THROW", "throw"}, {"BLOCK", "block"}, {"Throw", "throw"}, {"Block", "block"},
     {"Key_Ent", "Enter"}, {"Key_Bksp", "Backspace"}, {"Key_Esc", "Escape"}, {"Key_Space", "Space"},
     {"Key_Tab", "Tab"}, {"Key_ArUp", "up arrow"}, {"Key_ArDwn", "down arrow"}, {"Key_ArLft", "left arrow"},
@@ -111,11 +114,14 @@ std::string Clean(const std::string& in) {
         }
         if (c == '[') {
             size_t end = in.find(']', i + 1);
-            if (end != std::string::npos && end - i < 16) {
+            if (end != std::string::npos && end - i < 20) {
                 std::string tag = in.substr(i + 1, end - i - 1);
                 const char* words = nullptr;
                 for (auto& t : kTokens) if (tag == t.tag) { words = t.words; break; }
-                std::string spoken = words ? words : (tag.compare(0, 4, "Key_") == 0 ? tag.substr(4) : tag);
+                std::string spoken = words ? words
+                                     : tag.compare(0, 7, "Key_NM_") == 0 ? "numpad " + tag.substr(7)
+                                     : tag.compare(0, 4, "Key_") == 0     ? tag.substr(4)
+                                                                          : tag;
                 if (!out.empty() && out.back() != ' ') out += ' ';
                 out += spoken;
                 out += ' ';
@@ -132,6 +138,8 @@ std::string Clean(const std::string& in) {
         tidy += c;
     }
     while (!tidy.empty() && tidy.back() == ' ') tidy.pop_back();
+    // Tag teams are written "LIU KANG / SCORPION"; screen readers say "slash".
+    for (size_t at; (at = tidy.find(" / ")) != std::string::npos;) tidy.replace(at, 3, " and ");
     return tidy;
 }
 
@@ -151,6 +159,7 @@ void Say(const std::string& text, bool interrupt) {
 // On-screen key hints ("Select", "[A]") are not part of a menu item.
 bool IsHint(const std::string& path) {
     std::string l = Lower(path);
+    if (Contains(l, "buttonanim")) return false;  // a key binding's assigned key
     return Contains(l, "button") || Contains(l, ".nav.") || Contains(l, "navgroup") || Contains(l, "navigation") ||
            Contains(l, "prompt") || EndsWith(l, ".nav") || Contains(l, "nav_accept") || Contains(l, "nav_back");
 }
@@ -163,8 +172,8 @@ bool IsUnder(const std::string& path, const std::string& obj) {
 // other labels, then values.
 int Rank(const std::string& path) {
     std::string l = Lower(path);
-    if (EndsWith(l, ".label.varlabel") || Contains(l, "menuop") || Contains(l, "mainnav_text") ||
-        Contains(l, ".name.") || EndsWith(l, ".name")) return 0;
+    if (EndsWith(l, ".label.varlabel") || EndsWith(l, ".optionlabel.varlabel") || Contains(l, "menuop") ||
+        Contains(l, "mainnav_text") || Contains(l, ".name.") || EndsWith(l, ".name")) return 0;
     if (Contains(l, "label") || Contains(l, "title") || Contains(l, "name")) return 1;
     return 2;
 }
@@ -203,12 +212,21 @@ std::string ItemText(const std::string& obj) {
         if (!coins.empty()) out += ", reward " + coins + " koins";
         return out;
     }
-    struct Part { int rank; std::string path, text; };
+    struct Part { int rank; std::string path, text; unsigned long seq; const void* movie; };
     std::vector<Part> parts;
+    const void* newestMovie = nullptr;
+    unsigned long newest = 0;
     for (auto& kv : g_text) {
         if (!IsUnder(kv.first, obj) || kv.second.text.empty() || IsHint(kv.first)) continue;
-        parts.push_back({Rank(kv.first), kv.first, kv.second.text});
+        parts.push_back({Rank(kv.first), kv.first, kv.second.text, kv.second.seq, kv.second.movie});
+        if (kv.second.seq > newest) { newest = kv.second.seq; newestMovie = kv.second.movie; }
     }
+    // Different screens (pause menu, continue screen) use the same names;
+    // read only the movie that wrote to this item most recently.
+    if (newestMovie)
+        parts.erase(std::remove_if(parts.begin(), parts.end(),
+                                   [&](const Part& p) { return p.movie && p.movie != newestMovie; }),
+                    parts.end());
     std::sort(parts.begin(), parts.end(), [](const Part& a, const Part& b) {
         return a.rank != b.rank ? a.rank < b.rank : a.path < b.path;
     });
@@ -217,7 +235,10 @@ std::string ItemText(const std::string& obj) {
     for (auto& p : parts) {
         if (std::find(said.begin(), said.end(), p.text) != said.end()) continue;  // text and its drop shadow
         said.push_back(p.text);
-        if (!out.empty()) out += ", ";
+        if (!out.empty()) {
+            if (out.back() == ':') out.pop_back();  // "DAMAGE INFO:" then its value
+            out += ", ";
+        }
         out += p.text;
     }
     auto s = g_slider.find(obj);
@@ -259,6 +280,9 @@ void Highlight(const std::string& obj, bool force = false) {
     // itself (Challenge Tower opening); wait for it to stop.
     if (gap > 40 && gap < 300) g_settleMs = kBurstSettleMs;
     else if (gap >= 300) g_settleMs = kSettleMs;
+    // An item and a part inside it highlighted in the same frame (a key
+    // binding row and its key icon): the item is what to read.
+    if (gap <= 40 && !g_queuedObj.empty() && IsUnder(obj, g_queuedObj) && obj != g_queuedObj) return;
     g_queuedObj = obj;
     g_queuedForce = force;
     g_queuedTick = now;
@@ -273,7 +297,10 @@ DWORD WINAPI SettleThread(LPVOID) {
         if (age < g_settleMs) continue;
         std::string obj = g_queuedObj;
         if (ItemText(obj).empty() && !(obj.compare(0, 8, "MainNav.") == 0 && Contains(obj, ".navText"))) {
-            if (age > kGiveUpMs) g_queuedObj.clear();  // nothing readable in it
+            if (age > kGiveUpMs) {  // nothing readable in it
+                LogLine("SKIP highlight %s: no text", obj.c_str());
+                g_queuedObj.clear();
+            }
             continue;
         }
         g_queuedObj.clear();
@@ -299,6 +326,7 @@ void SpeakItem(const std::string& obj, bool force) {
     DWORD now = GetTickCount();
     if (text.empty()) return;
     g_lastInRoot[RootOf(obj)] = obj;
+    if (Contains(obj, ".mc_option_")) g_lastPauseItem = obj;
     // The game plays the highlight on several layers of one item (text,
     // shadow, container) in the same frame; speak it once.
     if (!force && text == g_lastSaid && now - g_lastTick < 400) return;
@@ -345,7 +373,7 @@ void Start() {
     LogLine("Announcer ready%s", g_muted ? " (muted by mk9hook.ini)" : "");
 }
 
-void OnText(const char* rawPath, const char* rawText) {
+void OnText(const char* rawPath, const char* rawText, const void* movie) {
     std::lock_guard<std::mutex> g(g_lock);
     std::string path = Normalize(rawPath);
     std::string text = Clean(rawText);
@@ -353,10 +381,19 @@ void OnText(const char* rawPath, const char* rawText) {
     bool changed = e.text != text;
     e.text = text;
     e.seq = ++g_seq;
+    e.movie = movie;
     std::string lower = Lower(path);
     static bool fighterSelectOpened;  // names are cleared when the screen opens
     if (EndsWith(path, "vs_names.name_p1.name.text") && text.empty()) fighterSelectOpened = true;
+    if (EndsWith(path, "vs_names.name_p2.name.text") && text.empty()) g_player2Choosing = false;
     if (text.empty()) return;
+    if (path == "mc_selections.frame.Nav.navGroup.buttonAccept.button.var_Label" && !g_lastPauseItem.empty() &&
+        !Contains(g_lastObj, ".mc_option_")) {
+        // Back from a pause sub-menu (Practice Options, AI Options): the
+        // game only refills the key hints; say where the highlight is.
+        Highlight(g_lastPauseItem, true);
+        return;
+    }
     if (fighterSelectOpened && EndsWith(path, "vs_names.name_p1.name.text")) {
         fighterSelectOpened = false;
         SayTitle("Choose your fighter");
@@ -366,6 +403,7 @@ void OnText(const char* rawPath, const char* rawText) {
     // Message boxes and screen titles are announced every time the game
     // shows them, even with the same text as last time.
     bool isTitle = (EndsWith(lower, "titletxt") && Contains(lower, "header")) || EndsWith(lower, "title_text") ||
+                   EndsWith(lower, "mc_selections.frame.title.text") ||
                    EndsWith(lower, "screentitletext") || EndsWith(lower, "description_title.vartext") ||
                    EndsWith(lower, "screentitle.vartext");
     bool isMsgBox = Contains(path, "msgBoxAnim.");
@@ -375,6 +413,11 @@ void OnText(const char* rawPath, const char* rawText) {
 
     if (!g_queuedObj.empty() && IsUnder(path, g_queuedObj)) {
         // Text for an item that's about to be spoken; SettleThread reads it.
+    } else if (EndsWith(path, "vs_names.name_p2.name.text") && !g_player2Choosing) {
+        // Player 2's cursor appeared (versus, or the practice opponent).
+        g_player2Choosing = true;
+        SayTitle("Player 2, choose your fighter");
+        Say(text, false);
     } else if (EndsWith(path, "name_p1.name.text") || EndsWith(path, "name_p2.name.text") ||
                EndsWith(path, "arena_name") || EndsWith(path, "num_reels")) {
         Say(text, true);
@@ -390,7 +433,31 @@ void OnText(const char* rawPath, const char* rawText) {
         Say(g_lastSaid, true);
         Say(g_lastExtra, false);
     } else if (EndsWith(path, "msgBoxAnim.mainText.message")) {
-        Say(text, true);
+        // Some boxes count down ("revert in 9 seconds") and are re-set on
+        // every key press; speak a box once while it stays on screen. The
+        // first set can be the raw "%d" template.
+        static std::string lastShape;
+        static DWORD lastSet;
+        std::string shape;
+        for (char c : text) if (!isdigit((unsigned char)c)) shape += c;
+        DWORD now = GetTickCount();
+        bool sameBox = shape == lastShape && now - lastSet < 3000;
+        lastShape = shape;
+        lastSet = now;
+        static bool skippedTemplate;
+        if (Contains(text, "%d") || Contains(text, "%s")) {
+            skippedTemplate = true;  // its buttons get set (and spoken) before the real text
+        } else if (!sameBox) {
+            Say(text, true);
+            if (skippedTemplate) {
+                for (const char* side : {"Left", "Right"}) {
+                    std::string base = "msgBoxAnim.navigationGroup.txt_option" + std::string(side);
+                    std::string label = TextAt(base), button = TextAt(base + "Button");
+                    if (!label.empty()) Say(button.empty() ? label : label + ", " + button, false);
+                }
+            }
+            skippedTemplate = false;
+        }
     } else if (EndsWith(path, "msgBoxAnim.navigationGroup.txt_optionLeftButton") ||
                EndsWith(path, "msgBoxAnim.navigationGroup.txt_optionRightButton")) {
         // The choice's label was set just before its button: "Yes, A button".
@@ -413,12 +480,30 @@ void OnText(const char* rawPath, const char* rawText) {
         Say(text, false);
     } else if (EndsWith(path, "LoadText.var_loadTxt")) {
         Say("Loading", false);
+    } else if (EndsWith(path, "practiceHUD.messageBox.body.varText")) {
+        // Tutorial lesson card: "Basic Movement. Every journey begins…"
+        std::string title = TextAt("practiceHUD.messageBox.title.varText");
+        Say((title.empty() ? text : title + ". " + text) + " A to continue.", true);
+    } else if (EndsWith(path, "infoTextContainer.infoText")) {
+        Say(text, true);  // Challenge Tower: the challenge's objective
+    } else if (EndsWith(path, "TextAnim.Body.Text")) {
+        // Challenge and tutorial cards: "Training: Special Tech. Land each
+        // special attack…", and dialogue: "Jax: Let's see what you've got!"
+        std::string name = TextAt(path.substr(0, path.size() - 9) + "Name.Text");
+        bool card = Contains(path, "UpperCenterTextAnim");
+        Say(name.empty() ? text : name + (card ? ". " : ": ") + text, false);
+    } else if (EndsWith(path, "TextAnim.Desc.varText")) {
+        std::string title = TextAt(path.substr(0, path.size() - 12) + "Title.varText");
+        Say(title.empty() ? text : title + ". " + text, false);
+    } else if (EndsWith(path, "moveNameAnim.move_name") || EndsWith(path, "sectionName.section_name")) {
+        Say(text, false);  // training: the move to perform, the lesson's section
     } else if (path == "locationAnim.location.locationLabel") {
         SayTitle(text);  // Krypt area
     } else if (path == "navAnim.purchaseInfo.label") {
         Highlight("navAnim.@krypt");  // its cost is set right after
     } else if (!g_lastObj.empty() && IsUnder(path, g_lastObj) && !IsHint(path) &&
-               (Contains(lower, "value") || Contains(lower, "optiontext") || Contains(lower, "optionlabel"))) {
+               (Contains(lower, "value") || Contains(lower, "optiontext") || Contains(lower, "optionlabel") ||
+                Contains(lower, "namegroup"))) {
         // A setting's value changed inside the highlighted item (left/right).
         Say(text, true);
     }
@@ -441,6 +526,8 @@ void OnCall(const char* rawPath, const char* firstArg) {
     } else if (method == "gotoAndPlay" && _stricmp(firstArg, "Activate") == 0) {
         auto it = g_text.find(obj + ".title.varText");  // a pop-up opened
         if (it != g_text.end() && !it->second.text.empty()) SayTitle(it->second.text);
+    } else if (isGoto && _stricmp(firstArg, "TaskSuccess") == 0) {
+        Say("Done!", true);  // tutorial step completed; the next one follows
     } else if (method == "FocusGain" && isdigit((unsigned char)firstArg[0])) {
         HighlightIndex(firstArg);
     } else if (method == "FocusGain") {
