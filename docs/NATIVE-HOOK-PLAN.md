@@ -187,3 +187,29 @@ lines without speaking.
 Not covered yet: the Kredits scroll, Krypt movement between graves (the
 D-pad didn't move it in testing), Challenge Tower Up/Down (same), online
 screens, Test Your Luck/Might, and fights themselves.
+
+## Backlog for a future session (noted 2026-10-21)
+
+MK9 native hook, not done yet:
+- Kredits scroll: say "Kredits, A to exit" at least.
+- Krypt: moving between graves and buying (the scripted D-pad didn't move;
+  needs a real controller or the stick), and unlock messages after a buy.
+- Challenge Tower: Up/Down and the bumpers' fast scroll (same: scripted
+  D-pad didn't register), and the Details pop-up.
+- Test Your Luck (reels), Test Your Might, Sight and Strike screens.
+- Tutorial: the button command for each move (drawn as icons). Could be
+  looked up from the move list text.
+- Story Mode chapter screens and its pause menu (expected to work like the
+  fight pause menu, untested).
+- Nekropolis (bios, kontent viewer), Kombat Kodes on the VS screen, ladder
+  end stats, online and lobby screens.
+- Two-player versus: both players moving on character select at once.
+- Installer: have Setup.exe copy `dinput8.dll` and the NVDA client into
+  the game folder and remove them on uninstall; make the OCR reader stay
+  quiet for MK9 when the hook is loaded (named mutex).
+- The user's live test with speech on (only the muted log and a separate
+  NVDA speech test have been verified).
+
+Arcade Kollection (MKHDGame.exe): hooks attach, but its CLIK menus move the
+highlight inside ActionScript. Needs a hook on CLIK focus changes or text
+rendering, and someone at the keyboard (injected input didn't work).
