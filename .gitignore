@@ -20,3 +20,4 @@ ocr_reader/known_screens/*.full.png
 
 # Claude Code local session config
 .claude/
+native/mk9hook/out/
